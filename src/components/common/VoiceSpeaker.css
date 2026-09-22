@@ -1,0 +1,5 @@
+/* Sound wave animation for active VoiceSpeaker */
+@keyframes soundWave {
+  0% { transform: scaleY(0.5); opacity: 0.6; }
+  100% { transform: scaleY(1.4); opacity: 1; }
+}
