@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   IndianRupee,
@@ -18,10 +18,14 @@ import { VoiceSpeaker } from '../../components/common/VoiceSpeaker';
 export const PaymentStatusPage: React.FC = () => {
   const { t, language } = useLanguage();
   const { farmer } = useAuth();
-  const { currentBooking, pastBookings } = useProcurement();
+  const { currentBooking, pastBookings, activePlanAppointments, pastPlanAppointments } = useProcurement();
   const navigate = useNavigate();
 
-  const activeRecord = currentBooking || (pastBookings.length > 0 ? pastBookings[0] : null);
+  const allAppts = [...activePlanAppointments, ...pastPlanAppointments].filter(a => a.bookingStatus !== 'CANCELLED');
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState(allAppts[0]?.id);
+
+  // Fallback to legacy single booking if no plan appointments exist
+  const activeRecord = allAppts.find(a => a.id === selectedAppointmentId) || allAppts[0] || currentBooking || (pastBookings.length > 0 ? pastBookings[0] : null);
 
   if (!activeRecord) {
     return (
@@ -62,6 +66,26 @@ export const PaymentStatusPage: React.FC = () => {
       maxWidth="3xl"
     >
       <div className="space-y-6">
+        {/* Dynamic Crop Tabs */}
+        {allAppts.length > 1 && (
+          <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 hide-scrollbar">
+            {allAppts.map(appt => (
+              <button
+                key={appt.id}
+                onClick={() => setSelectedAppointmentId(appt.id)}
+                className={`flex-shrink-0 flex items-center gap-2 px-5 py-3 rounded-2xl font-bold transition-all border-2 ${
+                  selectedAppointmentId === appt.id || (!selectedAppointmentId && activeRecord.id === appt.id)
+                    ? 'bg-agri-900 border-agri-900 text-white shadow-md'
+                    : 'bg-white border-slate-200 text-slate-600 hover:border-agri-300'
+                }`}
+              >
+                <span>{appt.cropIcon || '🌾'}</span>
+                <span>{appt.cropName}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Giant Payment Status Card */}
         <div className="bg-white border-2 border-agri-600 rounded-3xl p-6 sm:p-8 shadow-md space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">

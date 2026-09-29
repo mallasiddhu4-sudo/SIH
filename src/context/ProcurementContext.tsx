@@ -162,12 +162,48 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }): SlotBooking => {
     const { num: nextTokenNum, display: tokenStr } = nextUniqueToken();
     const grossVal = data.estimatedQuantityQuintals * 2320;
+    
+    // We can infer cropIcon dynamically or hardcode a fallback
+    let icon = '🌾';
+    if (data.cropId === 'cotton') icon = '☁️';
+    if (data.cropId === 'maize') icon = '🌽';
+    if (data.cropId === 'groundnut') icon = '🥜';
+
+    const servingOffset = 3 + Math.floor(Math.random() * 4);
+    const servingTokenNum = Math.max(1, nextTokenNum - servingOffset);
+    const now = new Date().toLocaleString();
+
+    const planAppt: ProcurementPlanAppointment = {
+        id: 'appt_' + Math.floor(10000 + Math.random() * 90000),
+        planId: 'plan_single_' + Date.now(),
+        farmerId: farmer?.farmerId || 'FRM10234',
+        farmerName: farmer?.name || 'Ravi Kumar',
+        phone: farmer?.phone || '9876543210',
+        cropId: data.cropId,
+        cropName: data.cropName,
+        cropIcon: icon,
+        estimatedQuantityQuintals: data.estimatedQuantityQuintals,
+        centreId: data.centreId,
+        centreName: data.centreName,
+        slotDate: data.slotDate,
+        slotTime: data.slotTime,
+        bookingTime: now,
+        bookingStatus: 'CONFIRMED',
+        tokenNumber: nextTokenNum,
+        tokenDisplay: tokenStr,
+        queueStatus: 'BOOKED',
+        currentServingToken: `A${servingTokenNum}`,
+        estimatedWaitMinutes: servingOffset * 8,
+        paymentStatus: 'PENDING_APPROVAL'
+    };
+
+    setActivePlanAppointments(prev => [...prev, planAppt]);
 
     const newBooking: SlotBooking = {
-      id: 'slot_bk_' + Math.floor(1000 + Math.random() * 9000),
-      farmerId: farmer?.farmerId || 'FRM10234',
-      farmerName: farmer?.name || 'Ravi Kumar',
-      phone: farmer?.phone || '9876543210',
+      id: planAppt.id,
+      farmerId: planAppt.farmerId,
+      farmerName: planAppt.farmerName,
+      phone: planAppt.phone,
       cropId: data.cropId,
       cropName: data.cropName,
       estimatedQuantityQuintals: data.estimatedQuantityQuintals,
@@ -177,11 +213,11 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
       slotTime: data.slotTime,
       tokenNumber: nextTokenNum,
       tokenDisplay: tokenStr,
-      bookingTime: new Date().toLocaleString(),
+      bookingTime: now,
       bookingStatus: 'CONFIRMED',
       queueStatus: 'BOOKED',
-      currentServingToken: `A${Math.max(1, nextTokenNum - 4)}`,
-      estimatedWaitMinutes: 25,
+      currentServingToken: `A${servingTokenNum}`,
+      estimatedWaitMinutes: servingOffset * 8,
       moisturePercent: 14.2,
       qualityGrade: 'Grade A',
       actualWeightQuintals: data.estimatedQuantityQuintals,

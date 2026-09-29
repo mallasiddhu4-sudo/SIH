@@ -82,7 +82,7 @@ export const QueueStatusPage: React.FC = () => {
           {activeAppts.length === 0 && (
             <div className="bg-white border-2 border-slate-200 rounded-3xl p-8 text-center space-y-4">
               <div className="text-5xl">🎫</div>
-              <h3 className="text-xl font-bold text-slate-800">No active single-booking slot</h3>
+              <h3 className="text-xl font-bold text-slate-800">No active procurement slot found</h3>
               <p className="text-slate-600 text-sm">
                 Please book a procurement slot to get your queue token.
               </p>
