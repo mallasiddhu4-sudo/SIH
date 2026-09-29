@@ -41,6 +41,7 @@ export const GenieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [activeAction, setActiveAction] = useState<'OPEN_RESCHEDULE' | 'OPEN_CANCEL' | null>(null);
 
   const guidanceTimerRef = useRef<any>(null);
+  const transcriptRef = useRef<string>('');
 
   const clearGuidance = () => {
     if (guidanceTimerRef.current) {
@@ -87,30 +88,47 @@ export const GenieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
 
     setTranscript('');
+    transcriptRef.current = '';
+    const hasErrorRef = { current: false };
     setIsListening(true);
     stopSpeaking();
 
-    speechRecognitionService.start(language, {
+    const success = speechRecognitionService.start(language, {
       onStart: () => {
         setIsListening(true);
         setActiveMessage(language === 'te' ? 'నేను వింటున్నాను... చెప్పండి 🎙' : 'Listening... speak now 🎙');
       },
       onResult: (text, isFinal) => {
         setTranscript(text);
+        transcriptRef.current = text;
         if (isFinal) {
           setIsListening(false);
           askGenie(text);
         }
       },
-      onError: (err) => {
+      onError: (errorType, friendlyMsg) => {
+        hasErrorRef.current = true;
         setIsListening(false);
-        console.warn('Speech recognition error:', err);
-        setActiveMessage(language === 'te' ? 'వాయిస్ అందుకోలేకపోయాము. దయచేసి టైప్ చేయండి.' : 'Could not hear clearly. Please type below.');
+        setActiveMessage(friendlyMsg);
       },
       onEnd: () => {
         setIsListening(false);
+        if (transcriptRef.current === 'PROCESSING' || hasErrorRef.current) {
+          return; // It ended because we manually stopped it after getting a final result, or an error occurred
+        }
+        
+        // If it ended naturally but we captured speech that wasn't finalized, process it anyway.
+        if (transcriptRef.current.trim()) {
+          askGenie(transcriptRef.current);
+        } else {
+          setActiveMessage(language === 'te' ? 'నేను ఏమీ వినలేకపోయాను. దయచేసి మళ్లీ ప్రయత్నించండి.' : 'I didn\'t hear anything. Please try again.');
+        }
       }
     });
+
+    if (!success) {
+      setIsListening(false);
+    }
   };
 
   const stopListening = () => {
@@ -135,6 +153,7 @@ export const GenieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const askGenie = async (query: string) => {
     if (!query || query.trim() === '') return;
 
+    transcriptRef.current = 'PROCESSING'; // Prevent onEnd duplicate calls or false empty errors
     stopListening();
     stopSpeaking();
 

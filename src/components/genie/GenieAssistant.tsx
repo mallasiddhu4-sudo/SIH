@@ -3,6 +3,7 @@ import { Mic, MicOff, Send, X, Sparkles, Volume2, HelpCircle } from 'lucide-reac
 import { useGenie } from '../../context/GenieContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useVoice } from '../../context/VoiceContext';
+import { speechRecognitionService } from '../../services/speechRecognitionService';
 
 export const GenieAssistant: React.FC = () => {
   const {
@@ -156,22 +157,31 @@ export const GenieAssistant: React.FC = () => {
 
             {/* Microphone Central Button */}
             <div className="flex items-center justify-center pt-1">
-              <button
-                type="button"
-                onClick={isListening ? stopListening : startListening}
-                className={`flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-bold text-sm shadow-md transition-all select-none ${
-                  isListening
-                    ? 'bg-red-600 hover:bg-red-700 text-white ring-4 ring-red-200 scale-105 animate-pulse'
-                    : 'bg-agri-700 hover:bg-agri-800 text-white active:scale-95'
-                }`}
-              >
-                {isListening ? <MicOff size={20} /> : <Mic size={20} />}
-                <span>
-                  {isListening
-                    ? language === 'te' ? 'ఆపండి (Tap to Stop)' : 'Stop Listening'
-                    : language === 'te' ? 'మాట్లాడండి (Tap to Speak)' : 'Tap to Speak'}
-                </span>
-              </button>
+              {speechRecognitionService.isSupported() ? (
+                <button
+                  type="button"
+                  onClick={isListening ? stopListening : startListening}
+                  className={`flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-bold text-sm shadow-md transition-all select-none ${
+                    isListening
+                      ? 'bg-red-600 hover:bg-red-700 text-white ring-4 ring-red-200 scale-105 animate-pulse'
+                      : 'bg-agri-700 hover:bg-agri-800 text-white active:scale-95'
+                  }`}
+                >
+                  {isListening ? <MicOff size={20} /> : <Mic size={20} />}
+                  <span>
+                    {isListening
+                      ? language === 'te' ? 'ఆపండి (Tap to Stop)' : 'Stop Listening'
+                      : language === 'te' ? 'మాట్లాడండి (Tap to Speak)' : 'Tap to Speak'}
+                  </span>
+                </button>
+              ) : (
+                <div className="flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-bold text-sm bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed select-none">
+                  <MicOff size={20} />
+                  <span>
+                    {language === 'te' ? 'వాయిస్ అందుబాటులో లేదు' : 'Voice input unavailable'}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
