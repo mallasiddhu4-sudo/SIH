@@ -5,7 +5,7 @@ import { useVoice } from './VoiceContext';
 import { useProcurement } from './ProcurementContext';
 import { GuidanceTarget } from '../types';
 import { speechRecognitionService } from '../services/speechRecognitionService';
-import { matchGenieIntent } from '../services/genieIntentService';
+import { matchGenieIntent, getAiGenieIntent } from '../services/genieIntentService';
 
 interface GenieContextType {
   isOpen: boolean;
@@ -29,7 +29,7 @@ const GenieContext = createContext<GenieContextType | undefined>(undefined);
 export const GenieProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { language, t } = useLanguage();
   const { speak, stop: stopSpeaking } = useVoice();
-  const { currentBooking } = useProcurement();
+  const { currentBooking, activePlanAppointments } = useProcurement();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -132,14 +132,28 @@ export const GenieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }, 8000);
   };
 
-  const askGenie = (query: string) => {
+  const askGenie = async (query: string) => {
     if (!query || query.trim() === '') return;
 
     stopListening();
     stopSpeaking();
 
+    // Show an 'understanding' state
+    setActiveMessage(language === 'te' ? 'అర్థం చేసుకుంటున్నాను...' : 'Thinking...');
+
     const tokenStr = currentBooking?.tokenDisplay || 'A127';
-    const result = matchGenieIntent(query, location.pathname, tokenStr);
+    
+    // Add multi-crop appointments to context so AI knows about individual crops
+    let result = await getAiGenieIntent(query, language, location.pathname, {
+      currentBooking,
+      activePlanAppointments
+    });
+
+    if (!result) {
+      // Fallback
+      console.log('Falling back to deterministic Genie intent');
+      result = matchGenieIntent(query, location.pathname, tokenStr);
+    }
 
     const responseText = result.spokenResponses[language] || result.spokenResponses.en;
     setActiveMessage(responseText);
@@ -149,7 +163,7 @@ export const GenieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     // Handle navigation
     if (result.route && location.pathname !== result.route) {
-      navigate(result.route);
+      navigate(result.route, { state: { cropMentioned: result.cropMentioned } });
     }
 
     // Set action (e.g. open reschedule modal)

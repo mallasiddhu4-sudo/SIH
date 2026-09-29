@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   CheckCircle2, AlertCircle, XCircle, ArrowRight, Clock,
   MapPin, Warehouse, Leaf, Info
@@ -121,10 +121,35 @@ const DECISION_CONFIG = {
 
 export const PreArrivalPage: React.FC = () => {
   const { language } = useLanguage();
-  const { currentBooking } = useProcurement();
+  const { activePlanAppointments } = useProcurement();
   const navigate = useNavigate();
+  const location = useLocation();
   const [checked, setChecked] = useState(false);
   const [result, setResult] = useState<PreArrivalCheck | null>(null);
+
+  const activeAppts = activePlanAppointments.filter(a => a.bookingStatus !== 'CANCELLED' && a.bookingStatus !== 'COMPLETED' && a.queueStatus !== 'COMPLETED');
+  
+  const initialCrop = location.state?.cropMentioned;
+  const initialAppt = initialCrop 
+    ? activeAppts.find(a => a.cropName.toLowerCase().includes(initialCrop) || a.cropId.toLowerCase().includes(initialCrop)) 
+    : undefined;
+
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState(initialAppt?.id || activeAppts[0]?.id);
+
+  useEffect(() => {
+    if (location.state?.cropMentioned) {
+      const match = activeAppts.find(a => a.cropName.toLowerCase().includes(location.state.cropMentioned) || a.cropId.toLowerCase().includes(location.state.cropMentioned));
+      if (match) setSelectedAppointmentId(match.id);
+    }
+  }, [location.state, activeAppts]);
+
+  const currentBooking = activeAppts.find(a => a.id === selectedAppointmentId) || activeAppts[0];
+
+  // Reset checked state when changing tabs
+  useEffect(() => {
+    setChecked(false);
+    setResult(null);
+  }, [selectedAppointmentId]);
 
   const farmerToken = currentBooking?.tokenNumber;
   const servingToken = currentBooking?.currentServingToken;
@@ -161,6 +186,26 @@ export const PreArrivalPage: React.FC = () => {
       maxWidth="lg"
     >
       <div className="space-y-5">
+        {/* Dynamic Crop Tabs */}
+        {activeAppts.length > 1 && (
+          <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 hide-scrollbar">
+            {activeAppts.map(appt => (
+              <button
+                key={appt.id}
+                onClick={() => setSelectedAppointmentId(appt.id)}
+                className={`flex-shrink-0 flex items-center gap-2 px-5 py-3 rounded-2xl font-bold transition-all border-2 ${
+                  selectedAppointmentId === appt.id
+                    ? 'bg-blue-900 border-blue-900 text-white shadow-md'
+                    : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'
+                }`}
+              >
+                <span>{appt.cropIcon}</span>
+                <span>{appt.cropName}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Info Panel */}
         {currentBooking ? (
           <div className="bg-white border-2 border-agri-200 rounded-2xl p-5 space-y-3">

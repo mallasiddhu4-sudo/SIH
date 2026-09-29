@@ -168,6 +168,60 @@ export interface MultiCropPlan {
   items: CropPlanItem[];
 }
 
+// ─── Confirmed Multi-Crop Appointment (created only after CONFIRM PLAN) ────────
+
+/**
+ * Each crop in a confirmed multi-crop plan gets its own independent appointment.
+ * This is created by confirmMultiCropPlan() in ProcurementContext.
+ * It mirrors SlotBooking but is keyed to a plan so all crops are visible.
+ */
+export interface ProcurementPlanAppointment {
+  // identity
+  id: string;
+  planId: string;           // groups appointments belonging to the same plan
+  farmerId: string;
+  farmerName: string;
+  phone: string;
+
+  // crop
+  cropId: string;
+  cropName: string;
+  cropIcon: string;
+
+  // booking details
+  estimatedQuantityQuintals: number;
+  centreId: string;
+  centreName: string;
+  slotDate: string;
+  slotTime: string;
+  bookingTime: string;
+  bookingStatus: BookingStatus;
+
+  // token (unique per appointment)
+  tokenNumber: number;
+  tokenDisplay: string;     // e.g. 'A124'
+
+  // live queue (independent per appointment)
+  queueStatus: QueueStep;
+  currentServingToken: string;
+  estimatedWaitMinutes: number;
+
+  // procurement results — operator-entered only
+  moisturePercent?: number;
+  qualityGrade?: 'Grade A' | 'Grade B' | 'Standard';
+  actualWeightQuintals?: number;
+  gunnyBagsCount?: number;
+  grossAmount?: number;
+  deductions?: number;
+  netPayableAmount?: number;
+
+  // payment
+  paymentStatus: PaymentStep;
+  transactionRef?: string;
+  paymentDate?: string;
+  paymentBankRef?: string;
+}
+
 // ─── Admin Analytics ────────────────────────────────────────────────────────────
 
 export interface YearlyProcurementRecord {

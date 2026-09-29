@@ -182,7 +182,12 @@ export const CentreOperatorPage: React.FC = () => {
     approvePayment,
     markPaymentCredited,
     completeBooking,
-    resetDemoData
+    resetDemoData,
+    activePlanAppointments,
+    advancePlanAppointmentQueue,
+    updatePlanAppointmentWeighment,
+    approvePlanAppointmentPayment,
+    markPlanAppointmentCredited,
   } = useProcurement();
 
   const centre = MOCK_CENTRES[0];
@@ -528,8 +533,79 @@ export const CentreOperatorPage: React.FC = () => {
               </button>
             </div>
           </div>
+
+          {/* ── Multi-Crop Plan Appointments (Operator View) ── */}
+          {activePlanAppointments.length > 0 && (
+            <div className="bg-white border-2 border-agri-200 rounded-3xl p-5 shadow-sm space-y-4">
+              <div className="flex items-center gap-2 text-agri-800 font-bold">
+                <span className="text-xl">📋</span>
+                <h3 className="text-lg text-slate-900">Multi-Crop Plan Appointments</h3>
+              </div>
+              <p className="text-xs text-slate-500 font-medium">
+                {activePlanAppointments.length} plan appointment(s) — each crop has its own token and lifecycle.
+              </p>
+              {activePlanAppointments.map(appt => (
+                <div key={appt.id} className="border-2 border-agri-100 rounded-2xl overflow-hidden">
+                  <div className="bg-agri-800 text-white px-3 py-2 flex items-center justify-between gap-2">
+                    <span className="font-black text-sm">{appt.cropIcon} {appt.cropName}</span>
+                    <span className="font-mono font-black text-harvest-300 text-sm">#{appt.tokenDisplay}</span>
+                  </div>
+                  <div className="p-3 space-y-3">
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-slate-500">Queue: </span>
+                        <strong className="text-agri-800 uppercase">{appt.queueStatus}</strong>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">Payment: </span>
+                        <strong className="text-harvest-700 uppercase text-[10px]">{appt.paymentStatus.replace(/_/g, ' ')}</strong>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">Farmer: </span>
+                        <strong>{appt.farmerName}</strong>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">Expected: </span>
+                        <strong>{appt.estimatedQuantityQuintals} Qt</strong>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2">
+                      {appt.queueStatus !== 'WEIGHING' && appt.bookingStatus !== 'CANCELLED' && (
+                        <button type="button"
+                          onClick={() => { advancePlanAppointmentQueue(appt.id); showToast(`Queue advanced for ${appt.cropName} (${appt.tokenDisplay})`); }}
+                          className="w-full py-2 px-3 rounded-xl bg-civic-700 hover:bg-civic-800 text-white font-bold text-xs transition-colors">
+                          📢 Advance Queue — {appt.cropName}
+                        </button>
+                      )}
+                      {appt.paymentStatus === 'PENDING_APPROVAL' && appt.bookingStatus !== 'CANCELLED' && (
+                        <PlanWeighmentForm
+                          appt={appt}
+                          onSave={(w, m, g) => { updatePlanAppointmentWeighment(appt.id, w, m, g); showToast(`Weight saved for ${appt.cropName}: ${w} Qt`); }}
+                        />
+                      )}
+                      {appt.paymentStatus === 'APPROVED' && (
+                        <button type="button"
+                          onClick={() => { approvePlanAppointmentPayment(appt.id); showToast(`DBT approved for ${appt.cropName}`); }}
+                          className="w-full py-2 px-3 rounded-xl bg-harvest-500 hover:bg-harvest-600 text-slate-950 font-bold text-xs transition-colors">
+                          ⚡ Approve DBT — {appt.cropName}
+                        </button>
+                      )}
+                      {appt.paymentStatus === 'DBT_PROCESSING' && (
+                        <button type="button"
+                          onClick={() => { markPlanAppointmentCredited(appt.id); showToast(`Marked credited for ${appt.cropName}`); }}
+                          className="w-full py-2 px-3 rounded-xl bg-agri-700 hover:bg-agri-800 text-white font-bold text-xs transition-colors">
+                          ✅ Mark Credited — {appt.cropName}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
+
 
       {/* Bottom Navigation */}
       <div className="flex flex-wrap gap-3 mt-8 pt-6 border-t border-slate-200">
@@ -585,6 +661,60 @@ const ActualWeightForm: React.FC<{
       </div>
       <button type="submit" className="w-full py-2.5 rounded-xl bg-agri-700 hover:bg-agri-800 text-white font-bold text-sm transition-colors">
         💾 Save & Certify
+      </button>
+    </form>
+  );
+};
+
+// -- PlanWeighmentForm: compact weighment entry for plan appointments ----------
+const PlanWeighmentForm: React.FC<{
+  appt: import('../../types').ProcurementPlanAppointment;
+  onSave: (w: number, m: number, g: 'Grade A' | 'Grade B' | 'Standard') => void;
+}> = ({ appt, onSave }) => {
+  const [weight, setWeight] = useState(appt.actualWeightQuintals || appt.estimatedQuantityQuintals);
+  const [moisture, setMoisture] = useState(appt.moisturePercent || 14.0);
+  const [grade, setGrade] = useState<'Grade A' | 'Grade B' | 'Standard'>(appt.qualityGrade || 'Grade A');
+  const [open, setOpen] = useState(false);
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)}
+        className="w-full py-2 px-3 rounded-xl bg-agri-50 border border-agri-300 text-agri-800 font-bold text-xs hover:bg-agri-100 transition-colors">
+        {'??'} Enter Weight / Certify � {appt.cropName}
+      </button>
+    );
+  }
+
+  return (
+    <form onSubmit={e => { e.preventDefault(); onSave(weight, moisture, grade); setOpen(false); }}
+      className="bg-agri-50 border border-agri-200 rounded-xl p-3 space-y-2">
+      <p className="text-[10px] font-black text-agri-900 uppercase tracking-wide">
+        {'??'} Weighment � {appt.cropName} (#{appt.tokenDisplay})
+      </p>
+      <div className="grid grid-cols-3 gap-2">
+        <div>
+          <label className="text-[10px] font-bold text-slate-600 block mb-1">Weight (Qt)</label>
+          <input type="number" step="0.1" value={weight} onChange={e => setWeight(Number(e.target.value))}
+            className="w-full px-2 py-1.5 border border-agri-300 rounded-lg font-mono text-xs focus:outline-none focus:ring-2 focus:ring-agri-400" />
+        </div>
+        <div>
+          <label className="text-[10px] font-bold text-slate-600 block mb-1">Moisture %</label>
+          <input type="number" step="0.1" value={moisture} onChange={e => setMoisture(Number(e.target.value))}
+            className="w-full px-2 py-1.5 border border-agri-300 rounded-lg font-mono text-xs focus:outline-none focus:ring-2 focus:ring-agri-400" />
+        </div>
+        <div>
+          <label className="text-[10px] font-bold text-slate-600 block mb-1">Grade</label>
+          <select value={grade} onChange={e => setGrade(e.target.value as any)}
+            className="w-full px-2 py-1.5 border border-agri-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-agri-400">
+            <option value="Grade A">Grade A</option>
+            <option value="Grade B">Grade B</option>
+            <option value="Standard">Standard</option>
+          </select>
+        </div>
+      </div>
+      <button type="submit"
+        className="w-full py-2 rounded-xl bg-agri-700 hover:bg-agri-800 text-white font-bold text-xs transition-colors">
+        {'??'} Save Weight and Certify
       </button>
     </form>
   );

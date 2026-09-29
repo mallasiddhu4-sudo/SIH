@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Calendar,
   Clock,
@@ -24,10 +24,30 @@ import { MOCK_CENTRES } from '../../data/mockCentres';
 
 export const ManageSlotPage: React.FC = () => {
   const { t, language } = useLanguage();
-  const { currentBooking, rescheduleSlot, cancelSlot, isCancelled } = useProcurement();
+  const { activePlanAppointments, reschedulePlanAppointment, cancelPlanAppointment } = useProcurement();
   const { speak } = useVoice();
   const { activeAction, clearActiveAction } = useGenie();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const activeAppts = activePlanAppointments.filter(a => a.bookingStatus !== 'CANCELLED' && a.bookingStatus !== 'COMPLETED' && a.queueStatus !== 'COMPLETED');
+  
+  const initialCrop = location.state?.cropMentioned;
+  const initialAppt = initialCrop 
+    ? activeAppts.find(a => a.cropName.toLowerCase().includes(initialCrop) || a.cropId.toLowerCase().includes(initialCrop)) 
+    : undefined;
+
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState(initialAppt?.id || activeAppts[0]?.id);
+
+  useEffect(() => {
+    if (location.state?.cropMentioned) {
+      const match = activeAppts.find(a => a.cropName.toLowerCase().includes(location.state.cropMentioned) || a.cropId.toLowerCase().includes(location.state.cropMentioned));
+      if (match) setSelectedAppointmentId(match.id);
+    }
+  }, [location.state, activeAppts]);
+
+  const currentBooking = activeAppts.find(a => a.id === selectedAppointmentId) || activeAppts[0];
+  const isCancelled = currentBooking?.bookingStatus === 'CANCELLED';
 
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -79,7 +99,7 @@ export const ManageSlotPage: React.FC = () => {
 
   const handleConfirmReschedule = () => {
     const centre = MOCK_CENTRES.find(c => c.id === selectedCentreId) || MOCK_CENTRES[0];
-    rescheduleSlot(selectedDate, selectedTime, centre.id, centre.name);
+    reschedulePlanAppointment(currentBooking.id, selectedDate, selectedTime, centre.id, centre.name);
     setShowRescheduleModal(false);
 
     const successVoice = language === 'te'
@@ -97,7 +117,7 @@ export const ManageSlotPage: React.FC = () => {
   };
 
   const handleConfirmCancel = () => {
-    cancelSlot();
+    cancelPlanAppointment(currentBooking.id);
     setShowCancelModal(false);
 
     const cancelVoice = language === 'te'
@@ -123,6 +143,26 @@ export const ManageSlotPage: React.FC = () => {
       maxWidth="3xl"
     >
       <div className="space-y-6">
+        {/* Dynamic Crop Tabs */}
+        {activeAppts.length > 1 && (
+          <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 hide-scrollbar">
+            {activeAppts.map(appt => (
+              <button
+                key={appt.id}
+                onClick={() => setSelectedAppointmentId(appt.id)}
+                className={`flex-shrink-0 flex items-center gap-2 px-5 py-3 rounded-2xl font-bold transition-all border-2 ${
+                  selectedAppointmentId === appt.id
+                    ? 'bg-agri-900 border-agri-900 text-white shadow-md'
+                    : 'bg-white border-slate-200 text-slate-600 hover:border-agri-300'
+                }`}
+              >
+                <span>{appt.cropIcon}</span>
+                <span>{appt.cropName}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Toast Alert */}
         {toastMessage && (
           <div className="bg-agri-700 text-white font-bold p-4 rounded-2xl flex items-center gap-3 shadow-md animate-fade-in">
@@ -134,30 +174,22 @@ export const ManageSlotPage: React.FC = () => {
         {/* Current Booking Summary Card */}
         <div
           id="current-booking-card"
-          className={`bg-white border-2 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 ${
-            isCancelled ? 'border-red-300 bg-red-50/30' : 'border-agri-600'
-          }`}
+          className={`bg-white border-2 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 border-agri-600`}
         >
           {/* Header row */}
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
             <div className="flex items-center gap-3.5">
-              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-3xl font-black shadow-sm ${
-                isCancelled ? 'bg-red-600 text-white' : 'bg-agri-700 text-white'
-              }`}>
-                {isCancelled ? '❌' : '📅'}
+              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-3xl font-black shadow-sm bg-agri-700 text-white`}>
+                📅
               </div>
               <div>
                 <div className="flex items-center gap-2">
                   <span className={`text-xs font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
-                    isCancelled
-                      ? 'bg-red-100 text-red-800'
-                      : currentBooking.bookingStatus === 'RESCHEDULED'
+                      currentBooking.bookingStatus === 'RESCHEDULED'
                       ? 'bg-blue-100 text-blue-800'
                       : 'bg-agri-100 text-agri-800'
                   }`}>
-                    {isCancelled
-                      ? (language === 'te' ? 'రద్దు చేయబడింది' : 'Slot Cancelled')
-                      : currentBooking.bookingStatus === 'RESCHEDULED'
+                    {currentBooking.bookingStatus === 'RESCHEDULED'
                       ? (language === 'te' ? 'తేదీ మార్చబడింది' : 'Rescheduled')
                       : (language === 'te' ? 'ధృవీకరించబడింది' : 'Confirmed')}
                   </span>
@@ -200,46 +232,27 @@ export const ManageSlotPage: React.FC = () => {
           </div>
 
           {/* Actions */}
-          {!isCancelled ? (
-            <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row items-center gap-3">
-              <button
-                type="button"
-                id="reschedule-btn"
-                onClick={() => setShowRescheduleModal(true)}
-                className="w-full sm:flex-1 py-3.5 px-5 rounded-2xl bg-agri-50 hover:bg-agri-100 text-agri-900 font-black text-base border-2 border-agri-400 flex items-center justify-center gap-2 transition-transform active:scale-98 shadow-sm min-h-touch"
-              >
-                <RotateCcw size={20} />
-                <span>{language === 'te' ? 'స్లాట్ మార్చండి (Reschedule)' : 'Reschedule Slot'}</span>
-              </button>
+          <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row items-center gap-3">
+            <button
+              type="button"
+              id="reschedule-btn"
+              onClick={() => setShowRescheduleModal(true)}
+              className="w-full sm:flex-1 py-3.5 px-5 rounded-2xl bg-agri-50 hover:bg-agri-100 text-agri-900 font-black text-base border-2 border-agri-400 flex items-center justify-center gap-2 transition-transform active:scale-98 shadow-sm min-h-touch"
+            >
+              <RotateCcw size={20} />
+              <span>{language === 'te' ? 'స్లాట్ మార్చండి (Reschedule)' : 'Reschedule Slot'}</span>
+            </button>
 
-              <button
-                type="button"
-                id="cancel-btn"
-                onClick={() => setShowCancelModal(true)}
-                className="w-full sm:flex-1 py-3.5 px-5 rounded-2xl bg-white hover:bg-red-50 text-red-700 font-bold text-base border-2 border-red-200 hover:border-red-300 flex items-center justify-center gap-2 transition-transform active:scale-98 shadow-sm min-h-touch"
-              >
-                <XCircle size={20} />
-                <span>{language === 'te' ? 'స్లాట్ రద్దు చేయండి (Cancel)' : 'Cancel Slot'}</span>
-              </button>
-            </div>
-          ) : (
-            <div className="pt-2 space-y-3">
-              <div className="p-4 bg-red-100/70 border border-red-300 rounded-2xl text-red-900 text-sm font-semibold">
-                {language === 'te'
-                  ? 'ఈ స్లాట్ రద్దు చేయబడింది. మీకు అనుకూలమైన సమయంలో మళ్లీ కొత్త స్లాట్ బుక్ చేసుకోవచ్చు.'
-                  : 'This slot has been cancelled. You can book a new slot at any time.'}
-              </div>
-
-              <PrimaryButton
-                onClick={() => navigate('/farmer/book-slot')}
-                variant="primary"
-                size="lg"
-                icon={<Calendar size={22} />}
-              >
-                {language === 'te' ? 'కొత్త స్లాట్ బుక్ చేయండి' : 'Book a New Slot'}
-              </PrimaryButton>
-            </div>
-          )}
+            <button
+              type="button"
+              id="cancel-btn"
+              onClick={() => setShowCancelModal(true)}
+              className="w-full sm:flex-1 py-3.5 px-5 rounded-2xl bg-white hover:bg-red-50 text-red-700 font-bold text-base border-2 border-red-200 hover:border-red-300 flex items-center justify-center gap-2 transition-transform active:scale-98 shadow-sm min-h-touch"
+            >
+              <XCircle size={20} />
+              <span>{language === 'te' ? 'స్లాట్ రద్దు చేయండి (Cancel)' : 'Cancel Slot'}</span>
+            </button>
+          </div>
         </div>
 
         {/* Quick Return */}
@@ -252,15 +265,13 @@ export const ManageSlotPage: React.FC = () => {
             &larr; {language === 'te' ? 'ముఖ్య పేజీకి తిరిగి వెళ్లండి' : 'Back to Home'}
           </button>
 
-          {!isCancelled && (
-            <button
-              type="button"
-              onClick={() => navigate('/farmer/queue')}
-              className="text-agri-800 font-bold hover:underline flex items-center gap-1.5"
-            >
-              {language === 'te' ? 'లైవ్ క్యూ చూడండి' : 'View Live Queue'} &rarr;
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => navigate('/farmer/queue')}
+            className="text-agri-800 font-bold hover:underline flex items-center gap-1.5"
+          >
+            {language === 'te' ? 'లైవ్ క్యూ చూడండి' : 'View Live Queue'} &rarr;
+          </button>
         </div>
       </div>
 

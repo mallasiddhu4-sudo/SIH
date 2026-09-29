@@ -31,6 +31,7 @@ import { CentreIntelligencePage } from './pages/centre/CentreIntelligencePage';
 import { PreArrivalPage } from './pages/farmer/PreArrivalPage';
 import { MultiCropPlannerPage } from './pages/farmer/MultiCropPlannerPage';
 import { CropInfoPage } from './pages/farmer/CropInfoPage';
+import { MyProcurementPlanPage } from './pages/farmer/MyProcurementPlanPage';
 
 // Route wrapper to ensure Language Selection always appears first on startup / fresh session
 const RequireSessionLanguage: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -93,6 +94,7 @@ export function App() {
                     <Route path="/farmer/pre-arrival" element={<PreArrivalPage />} />
                     <Route path="/farmer/multi-crop" element={<MultiCropPlannerPage />} />
                     <Route path="/farmer/crop-info" element={<CropInfoPage />} />
+                    <Route path="/farmer/my-plan" element={<MyProcurementPlanPage />} />
 
                     {/* Centre Pages */}
                     <Route path="/centre/dashboard" element={<CentreOperatorPage />} />

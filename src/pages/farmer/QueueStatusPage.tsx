@@ -1,5 +1,5 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Ticket,
   Users,
@@ -21,8 +21,27 @@ import { MOCK_CENTRE_OPERATIONS } from '../../data/mockCentreOperations';
 
 export const QueueStatusPage: React.FC = () => {
   const { t, language } = useLanguage();
-  const { currentBooking, advanceQueue } = useProcurement();
+  const { advanceQueue, activePlanAppointments } = useProcurement();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const activeAppts = activePlanAppointments.filter(a => a.bookingStatus !== 'CANCELLED');
+  
+  const initialCrop = location.state?.cropMentioned;
+  const initialAppt = initialCrop 
+    ? activeAppts.find(a => a.cropName.toLowerCase().includes(initialCrop) || a.cropId.toLowerCase().includes(initialCrop)) 
+    : undefined;
+
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState(initialAppt?.id || activeAppts[0]?.id);
+
+  useEffect(() => {
+    if (location.state?.cropMentioned) {
+      const match = activeAppts.find(a => a.cropName.toLowerCase().includes(location.state.cropMentioned) || a.cropId.toLowerCase().includes(location.state.cropMentioned));
+      if (match) setSelectedAppointmentId(match.id);
+    }
+  }, [location.state, activeAppts]);
+
+  const currentBooking = activeAppts.find(a => a.id === selectedAppointmentId) || activeAppts[0];
 
   // Look up live centre load status for load-aware messaging
   const centre = MOCK_CENTRES.find(c => c.id === currentBooking?.centreId);
@@ -38,17 +57,45 @@ export const QueueStatusPage: React.FC = () => {
         backTo="/farmer/dashboard"
         maxWidth="lg"
       >
-        <div className="bg-white border-2 border-slate-200 rounded-3xl p-8 text-center space-y-4">
-          <div className="text-5xl">🎫</div>
-          <h3 className="text-xl font-bold text-slate-800">No active slot booked</h3>
-          <p className="text-slate-600 text-sm">Please book a procurement slot to get your queue token.</p>
-          <PrimaryButton onClick={() => navigate('/farmer/book-slot')}>
-            {t('dashboard.card_book_slot')}
-          </PrimaryButton>
+        <div className="space-y-4">
+          {/* Dynamic Crop Tabs */}
+          {activeAppts.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 hide-scrollbar">
+              {activeAppts.map(appt => (
+                <button
+                  key={appt.id}
+                  onClick={() => setSelectedAppointmentId(appt.id)}
+                  className={`flex-shrink-0 flex items-center gap-2 px-5 py-3 rounded-2xl font-bold transition-all border-2 ${
+                    selectedAppointmentId === appt.id
+                      ? 'bg-civic-900 border-civic-900 text-white shadow-md'
+                      : 'bg-white border-slate-200 text-slate-600 hover:border-civic-300'
+                  }`}
+                >
+                  <span>{appt.cropIcon}</span>
+                  <span>{appt.cropName}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+
+          {activeAppts.length === 0 && (
+            <div className="bg-white border-2 border-slate-200 rounded-3xl p-8 text-center space-y-4">
+              <div className="text-5xl">🎫</div>
+              <h3 className="text-xl font-bold text-slate-800">No active single-booking slot</h3>
+              <p className="text-slate-600 text-sm">
+                Please book a procurement slot to get your queue token.
+              </p>
+              <PrimaryButton onClick={() => navigate('/farmer/book-slot')}>
+                {t('dashboard.card_book_slot')}
+              </PrimaryButton>
+            </div>
+          )}
         </div>
       </PageContainer>
     );
   }
+
 
   const tokenNum = typeof currentBooking.tokenNumber === 'number'
     ? currentBooking.tokenNumber
@@ -83,6 +130,26 @@ export const QueueStatusPage: React.FC = () => {
       maxWidth="3xl"
     >
       <div className="space-y-6">
+        {/* Dynamic Crop Tabs */}
+        {activeAppts.length > 1 && (
+          <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 hide-scrollbar">
+            {activeAppts.map(appt => (
+              <button
+                key={appt.id}
+                onClick={() => setSelectedAppointmentId(appt.id)}
+                className={`flex-shrink-0 flex items-center gap-2 px-5 py-3 rounded-2xl font-bold transition-all border-2 ${
+                  selectedAppointmentId === appt.id
+                    ? 'bg-civic-900 border-civic-900 text-white shadow-md'
+                    : 'bg-white border-slate-200 text-slate-600 hover:border-civic-300'
+                }`}
+              >
+                <span>{appt.cropIcon}</span>
+                <span>{appt.cropName}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Giant Live Queue Token Card */}
         <div
           id="token-display-card"

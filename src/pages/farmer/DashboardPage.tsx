@@ -22,16 +22,20 @@ import { VoiceSpeaker } from '../../components/common/VoiceSpeaker';
 export const DashboardPage: React.FC = () => {
   const { t, language } = useLanguage();
   const { farmer } = useAuth();
-  const { currentBooking, pastBookings, hasActiveBooking, isCancelled } = useProcurement();
+  const { pastBookings, activePlanAppointments } = useProcurement();
   const { openGenie } = useGenie();
   const navigate = useNavigate();
 
   const farmerName = farmer?.name || 'Ravi Kumar';
   const farmerId = farmer?.farmerId || 'FRM10234';
 
+  const activeAppts = activePlanAppointments.filter(a => a.bookingStatus !== 'CANCELLED' && a.bookingStatus !== 'COMPLETED' && a.queueStatus !== 'COMPLETED');
+  const hasActiveBooking = activeAppts.length > 0;
+  const firstAppt = activeAppts[0];
+
   const welcomeOverview = language === 'te'
-    ? `నమస్కారం ${farmerName}. ${hasActiveBooking && currentBooking ? `మీ తదుపరి సేకరణ తేదీ ${currentBooking.slotDate} ${currentBooking.slotTime}, కేంద్రం: ${currentBooking.centreName}, టోకెన్ ${currentBooking.tokenDisplay || currentBooking.tokenNumber}.` : 'మీకు ప్రస్తుతం సక్రియ స్లాట్ లేదు. కొత్త స్లాట్ బుక్ చేసుకోవచ్చు.'}`
-    : `Welcome ${farmerName}. ${hasActiveBooking && currentBooking ? `Your next visit is on ${currentBooking.slotDate} at ${currentBooking.slotTime}, Centre: ${currentBooking.centreName}, Token #${currentBooking.tokenDisplay || currentBooking.tokenNumber}.` : 'You have no active upcoming slot. You can book a slot below.'}`;
+    ? `నమస్కారం ${farmerName}. ${hasActiveBooking && firstAppt ? `మీ తదుపరి సేకరణ తేదీ ${firstAppt.slotDate} ${firstAppt.slotTime}, కేంద్రం: ${firstAppt.centreName}.` : 'మీకు ప్రస్తుతం సక్రియ స్లాట్ లేదు. కొత్త స్లాట్ బుక్ చేసుకోవచ్చు.'}`
+    : `Welcome ${farmerName}. ${hasActiveBooking && firstAppt ? `Your next visit is on ${firstAppt.slotDate} at ${firstAppt.slotTime}, Centre: ${firstAppt.centreName}.` : 'You have no active upcoming slot. You can book a slot below.'}`;
 
   const choice1Speech = hasActiveBooking
     ? (language === 'te' ? 'నా స్లాట్ నిర్వహణ. తేదీ మార్పు లేదా రద్దు చేయండి.' : 'Manage My Slot. View details, reschedule date, or cancel booking.')
@@ -72,48 +76,62 @@ export const DashboardPage: React.FC = () => {
             </div>
           </div>
 
-          {hasActiveBooking && currentBooking && (
+          {hasActiveBooking && (
             <div className="bg-harvest-100 border border-harvest-400 px-4 py-2 rounded-2xl text-right self-start sm:self-center shadow-xs">
               <span className="text-[11px] font-black uppercase tracking-wider text-harvest-900 block">
-                {language === 'te' ? 'టోకెన్ నంబర్' : 'Token'}
+                {language === 'te' ? 'యాక్టివ్ పంటలు' : 'Active Crops'}
               </span>
               <strong className="text-2xl font-black text-slate-950 font-mono">
-                #{currentBooking.tokenDisplay || currentBooking.tokenNumber}
+                {activeAppts.length}
               </strong>
             </div>
           )}
         </div>
 
         {/* Next Visit Box (Only shown when booking is active / upcoming) */}
-        {hasActiveBooking && currentBooking ? (
-          <div
-            id="next-visit-summary"
-            onClick={() => navigate('/farmer/manage-slot')}
-            className="bg-agri-900 text-white rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer hover:bg-agri-950 transition-colors shadow-md group"
-          >
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-black bg-harvest-400 text-slate-950 px-2 py-0.5 rounded uppercase">
-                  {language === 'te' ? 'తదుపరి రాక' : 'Your Next Visit'}
-                </span>
-                <span className="text-sm text-agri-200 font-medium">
-                  {currentBooking.cropName} ({currentBooking.estimatedQuantityQuintals} Quintals)
-                </span>
-              </div>
-              <div className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-                <Calendar size={18} className="text-harvest-400" />
-                <span>{currentBooking.slotDate} • {currentBooking.slotTime}</span>
-              </div>
-              <p className="text-xs text-agri-300 flex items-center gap-1">
-                <Warehouse size={14} className="text-harvest-400" />
-                <span>{currentBooking.centreName}</span>
-              </p>
-            </div>
+        {hasActiveBooking ? (
+          <div className="space-y-3">
+            <h3 className="text-xs font-black uppercase tracking-widest text-slate-500 pl-1">
+              {language === 'te' ? 'మీ రాబోయే అపాయింట్‌మెంట్‌లు' : 'Your Upcoming Appointments'}
+            </h3>
+            {activeAppts.map(appt => (
+              <div
+                key={appt.id}
+                id={`next-visit-summary-${appt.id}`}
+                onClick={() => navigate('/farmer/manage-slot', { state: { cropMentioned: appt.cropId.split('_')[0] } })}
+                className="bg-agri-900 text-white rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer hover:bg-agri-950 transition-colors shadow-md group"
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black bg-harvest-400 text-slate-950 px-2 py-0.5 rounded uppercase">
+                      {appt.cropIcon} {appt.cropName}
+                    </span>
+                    <span className="text-sm text-agri-200 font-medium">
+                      ({appt.estimatedQuantityQuintals} Quintals)
+                    </span>
+                  </div>
+                  <div className="text-base sm:text-lg font-bold text-white flex items-center gap-2 pt-1">
+                    <Calendar size={18} className="text-harvest-400" />
+                    <span>{appt.slotDate} • {appt.slotTime}</span>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs text-agri-300">
+                    <span className="flex items-center gap-1">
+                      <Warehouse size={14} className="text-harvest-400" />
+                      {appt.centreName}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Ticket size={14} className="text-harvest-400" />
+                      #{appt.tokenDisplay}
+                    </span>
+                  </div>
+                </div>
 
-            <div className="flex items-center gap-1.5 self-end sm:self-center font-bold text-xs sm:text-sm bg-white/10 group-hover:bg-white/20 px-3.5 py-2 rounded-xl border border-white/20 transition-colors">
-              <span>{language === 'te' ? 'స్లాట్ మార్చండి / రద్దు' : 'Manage Slot'}</span>
-              <ArrowRight size={16} />
-            </div>
+                <div className="flex items-center gap-1.5 self-end sm:self-center font-bold text-xs sm:text-sm bg-white/10 group-hover:bg-white/20 px-3.5 py-2 rounded-xl border border-white/20 transition-colors">
+                  <span>{language === 'te' ? 'స్లాట్ మార్చండి / రద్దు' : 'Manage Slot'}</span>
+                  <ArrowRight size={16} />
+                </div>
+              </div>
+            ))}
           </div>
         ) : (
           <div className="bg-warmgray-50 border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-slate-700 text-sm">
@@ -258,6 +276,46 @@ export const DashboardPage: React.FC = () => {
           <span className="text-xs font-black uppercase tracking-wider text-slate-500">Smart Tools</span>
           <div className="flex-1 h-px bg-slate-200" />
         </div>
+
+        {/* Multi-Crop Plan summary (shown when active plan appointments exist) */}
+        {activePlanAppointments.filter(a => a.bookingStatus !== 'CANCELLED').length > 0 && (
+          <div
+            id="my-procurement-plan-card"
+            onClick={() => navigate('/farmer/my-plan')}
+            className="bg-white border-2 border-agri-400 rounded-2xl p-4 cursor-pointer hover:border-agri-600 hover:shadow-md transition-all group"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-agri-700 text-white flex items-center justify-center text-2xl flex-shrink-0">
+                  📋
+                </div>
+                <div>
+                  <p className="font-black text-slate-900 text-base">
+                    {language === 'te' ? 'నా ప్రొక్యూర్మెంట్ ప్లాన్' : 'My Procurement Plan'}
+                  </p>
+                  <p className="text-xs text-slate-600 font-medium">
+                    {activePlanAppointments.filter(a => a.bookingStatus !== 'CANCELLED').length} {language === 'te' ? 'సక్రియ అపాయింట్మెంట్లు' : 'active appointments'}
+                    {' · '}
+                    {activePlanAppointments.filter(a => a.bookingStatus !== 'CANCELLED').map(a => a.cropIcon).join(' ')}
+                  </p>
+                </div>
+              </div>
+              <ArrowRight size={20} className="text-agri-700 group-hover:translate-x-1 transition-transform" />
+            </div>
+            <div className="mt-3 grid grid-cols-1 gap-1.5">
+              {activePlanAppointments.filter(a => a.bookingStatus !== 'CANCELLED').map(appt => (
+                <div key={appt.id} className="flex items-center justify-between text-xs bg-agri-50 border border-agri-200 rounded-xl px-3 py-1.5">
+                  <span className="font-bold text-slate-800">{appt.cropIcon} {appt.cropName}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-black text-agri-800">#{appt.tokenDisplay}</span>
+                    <span className="text-slate-500">{appt.slotDate}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
             {
