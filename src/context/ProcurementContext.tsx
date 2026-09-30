@@ -483,6 +483,13 @@ export const ProcurementProvider: React.FC<{ children: React.ReactNode }> = ({ c
         ? { ...appt, bookingStatus: 'CANCELLED' as BookingStatus }
         : appt
     ));
+    // FIX (Bug 3-A): Keep currentBooking in sync so dashboard/queue pages also reflect cancellation.
+    setCurrentBooking(prev => {
+      if (prev && prev.id === appointmentId) {
+        return { ...prev, bookingStatus: 'CANCELLED' as BookingStatus };
+      }
+      return prev;
+    });
   };
 
   const reschedulePlanAppointment = (

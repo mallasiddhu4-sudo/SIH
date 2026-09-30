@@ -119,10 +119,15 @@ function extractEntities(q: string) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function checkConcepts(q: string) {
-  const has = (key: keyof typeof CONCEPTS) => CONCEPTS[key].some(word => q.includes(word));
+  // Use regex with word boundaries to prevent "reschedule" matching "schedule"
+  const has = (key: keyof typeof CONCEPTS) => CONCEPTS[key].some(word => {
+    // If it's a non-English script, boundary might not work as expected, but for 'schedule' vs 'reschedule' it's English.
+    return new RegExp(`(?:^|\\W)${word}(?:\\W|$)`, 'i').test(q);
+  });
+  
   return {
     isBook: has('ACTION_BOOK'),
-    isChange: has('ACTION_CHANGE'),
+    isChange: has('ACTION_CHANGE') || q.includes('reschedule') || q.includes('రీషెడ్యూల్') || q.includes('रीशेड्यूल'),
     isCancel: has('ACTION_CANCEL'),
     isShow: has('ACTION_SHOW'),
     isGo: has('ACTION_GO'),
@@ -378,7 +383,7 @@ function mapIntentToResult(intent: string, entities: any, confidence: string): I
       break;
       
     case 'SHOW_CROP_INFO':
-      route = '/farmer/my-plan'; // Fallback route
+      route = '/farmer/crop-info';
       spokenResponses = {
         en: `Showing information about ${cropName || 'your crops'}.`,
         te: `${cropName || 'మీ పంట'} గురించి సమాచారం చూపిస్తున్నాను.`,
@@ -417,6 +422,37 @@ export async function getAiGenieIntent(
   currentRoute: string = '/',
   currentContext: any = {}
 ): Promise<IntentResult | null> {
-  const result = matchGenieIntent(query);
-  return result;
+  try {
+    const res = await fetch('/.netlify/functions/genie', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: query, language, currentPage: currentRoute, currentContext })
+    });
+    
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        intent: data.intent,
+        route: '', // To be determined by the task engine
+        spokenResponses: {
+          en: data.responseText,
+          te: data.responseText,
+          hi: data.responseText,
+          ta: data.responseText,
+          kn: data.responseText
+        },
+        action: 'NONE',
+        confidence: data.confidence > 0.7 ? 'HIGH' : 'MEDIUM',
+        cropMentioned: data.entities?.crop,
+        fieldHint: undefined,
+        // Also attach the raw entities for the task engine
+        _rawEntities: data.entities,
+        _needsClarification: data.needsClarification
+      } as IntentResult & { _rawEntities?: any, _needsClarification?: boolean };
+    }
+  } catch (err) {
+    console.error("AI Genie Intent failed, using fallback:", err);
+  }
+  
+  return matchGenieIntent(query, currentRoute);
 }

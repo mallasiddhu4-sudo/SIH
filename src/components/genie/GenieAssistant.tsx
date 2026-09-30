@@ -22,6 +22,13 @@ export const GenieAssistant: React.FC = () => {
   const { isSpeaking } = useVoice();
   const [inputText, setInputText] = useState('');
 
+  const getOrbState = () => {
+    if (isListening) return 'genie-orb-listening';
+    if (activeMessage.includes('Working') || activeMessage.includes('పని చేస్తున్నాను')) return 'genie-orb-working';
+    if (activeMessage.includes('Connecting') || activeMessage.includes('కనెక్ట్')) return 'genie-orb-working';
+    return 'genie-orb-idle';
+  };
+
   const quickPrompts: Record<string, string[]> = {
     te: [
       'ధాన్యం కేంద్రాలు ఎక్కడ ఉన్నాయి?',
@@ -106,7 +113,7 @@ export const GenieAssistant: React.FC = () => {
           {/* Header */}
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-2xl bg-agri-700 text-white flex items-center justify-center text-xl shadow-sm border border-agri-600">
+              <div className={`w-10 h-10 rounded-2xl text-white flex items-center justify-center text-xl shadow-sm border border-transparent ${getOrbState()}`}>
                 🧞
               </div>
               <div>

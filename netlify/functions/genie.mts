@@ -38,7 +38,17 @@ SHOW_TOKEN, SHOW_QUEUE, SHOW_WAIT_TIME,
 ARRIVAL_DECISION, GO_NOW, WAIT, RESCHEDULE,
 CANCEL_APPOINTMENT, RESCHEDULE_APPOINTMENT,
 SHOW_PROCUREMENT_STATUS, SHOW_PAYMENT_STATUS, SHOW_QUALITY_STATUS,
-SHOW_CENTRE_STATUS, SHOW_CENTRE_LOAD, HELP, UNKNOWN.
+SHOW_CENTRE_STATUS, SHOW_CENTRE_LOAD, FAQ, HELP, UNKNOWN.
+
+FAQ Knowledge Base (Translate explanation to user's language):
+- Token: A unique ID given after booking to identify your slot at the centre.
+- Reschedule: Changing your existing booking to another available date or time.
+- Cancel: Removing your confirmed booking, so that appointment will no longer remain active.
+- Expected quantity: The estimated amount of crop you plan to bring (in quintals or kg).
+- Actual weight: The exact weight measured at the procurement centre.
+- Procurement centre: The official location where you bring your crop to sell.
+- Live queue: The real-time number of farmers waiting ahead of you at the centre.
+- Should I Go: A recommendation on whether to travel to the centre now based on your slot and queue.
 
 Context Information:
 - Current Page: ${currentPage || 'unknown'}

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 import { useProcurement } from '../../context/ProcurementContext';
+import { useGenie } from '../../context/GenieContext';
 import { PageContainer } from '../../components/common/PageContainer';
 import { PrimaryButton } from '../../components/common/PrimaryButton';
 import { VoiceSpeaker } from '../../components/common/VoiceSpeaker';
@@ -22,18 +23,76 @@ import { MOCK_CENTRES } from '../../data/mockCentres';
 export const BookSlotPage: React.FC = () => {
   const { t, language } = useLanguage();
   const { bookSlot } = useProcurement();
+  const { notifyManualInteraction, taskState } = useGenie();
   const navigate = useNavigate();
 
-  const [selectedCropId, setSelectedCropId] = useState(MOCK_CROPS[0].id);
-  const [quantity, setQuantity] = useState(48.6);
+  // Initialize state based on task state if Genie filled it, otherwise default
+  const [selectedCropId, setSelectedCropId] = useState(() => {
+    if (taskState.crop) {
+      const c = MOCK_CROPS.find(c => c.name.toLowerCase() === taskState.crop?.toLowerCase());
+      if (c) return c.id;
+    }
+    return MOCK_CROPS[0].id;
+  });
+  
+  const [quantity, setQuantity] = useState(taskState.quantity || 48.6);
   const [selectedCentreId, setSelectedCentreId] = useState(MOCK_CENTRES[0].id);
-  const [selectedDate, setSelectedDate] = useState('2026-09-03');
-  const [selectedTime, setSelectedTime] = useState('10:00 AM - 11:00 AM');
+  const [selectedDate, setSelectedDate] = useState(taskState.date || '2026-09-03');
+  const [selectedTime, setSelectedTime] = useState(taskState.time || '10:00 AM - 11:00 AM');
+  
+  // Sync when Genie updates the task state
+  React.useEffect(() => {
+    if (taskState.crop) {
+      const c = MOCK_CROPS.find(c => c.name.toLowerCase() === taskState.crop?.toLowerCase());
+      if (c && c.id !== selectedCropId) setSelectedCropId(c.id);
+    }
+    if (taskState.quantity && taskState.quantity !== quantity) {
+      setQuantity(taskState.quantity);
+    }
+    if (taskState.centreName) {
+      const c = MOCK_CENTRES.find(c => c.name.toLowerCase() === taskState.centreName?.toLowerCase());
+      if (c && c.id !== selectedCentreId) setSelectedCentreId(c.id);
+    }
+    if (taskState.date && taskState.date !== selectedDate) {
+      setSelectedDate(taskState.date);
+    }
+    if (taskState.time && taskState.time !== selectedTime) {
+      setSelectedTime(taskState.time);
+    }
+  }, [taskState]);
+
   const [isSuccess, setIsSuccess] = useState(false);
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);
 
   const selectedCrop = MOCK_CROPS.find(c => c.id === selectedCropId) || MOCK_CROPS[0];
   const selectedCentre = MOCK_CENTRES.find(c => c.id === selectedCentreId) || MOCK_CENTRES[0];
+
+  const handleCropSelect = (id: string) => {
+    setSelectedCropId(id);
+    const cropObj = MOCK_CROPS.find(c => c.id === id);
+    if (cropObj) notifyManualInteraction('crop', cropObj.name);
+  };
+
+  const handleQuantityChange = (newQ: number) => {
+    setQuantity(newQ);
+    notifyManualInteraction('quantity', newQ);
+  };
+
+  const handleCentreSelect = (id: string) => {
+    setSelectedCentreId(id);
+    const centreObj = MOCK_CENTRES.find(c => c.id === id);
+    if (centreObj) notifyManualInteraction('centreName', centreObj.name);
+  };
+
+  const handleDateSelect = (val: string) => {
+    setSelectedDate(val);
+    notifyManualInteraction('date', val);
+  };
+
+  const handleTimeSelect = (val: string) => {
+    setSelectedTime(val);
+    notifyManualInteraction('time', val);
+  };
 
   const dateOptions = [
     { value: '2026-09-03', label: '3 September 2026', dateStr: 'Thu, 3 Sep', slotsLeft: '24 Slots Open' },
@@ -149,7 +208,7 @@ export const BookSlotPage: React.FC = () => {
               return (
                 <div
                   key={crop.id}
-                  onClick={() => setSelectedCropId(crop.id)}
+                  onClick={() => handleCropSelect(crop.id)}
                   role="button"
                   tabIndex={0}
                   className={`p-3.5 rounded-2xl border-2 flex items-center justify-between gap-2 cursor-pointer select-none transition-all ${
@@ -195,7 +254,7 @@ export const BookSlotPage: React.FC = () => {
           <div className="flex items-center justify-between gap-4">
             <button
               type="button"
-              onClick={() => setQuantity(q => Math.max(5, Math.round((q - 5) * 10) / 10))}
+              onClick={() => handleQuantityChange(Math.max(5, Math.round((quantity - 5) * 10) / 10))}
               className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-warmgray-100 hover:bg-warmgray-200 text-slate-900 font-black text-2xl flex items-center justify-center border-2 border-slate-300 active:scale-95 transition-transform"
               title="Decrease 5 Quintals"
             >
@@ -213,7 +272,7 @@ export const BookSlotPage: React.FC = () => {
 
             <button
               type="button"
-              onClick={() => setQuantity(q => Math.round((q + 5) * 10) / 10)}
+              onClick={() => handleQuantityChange(Math.round((quantity + 5) * 10) / 10)}
               className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-agri-100 hover:bg-agri-200 text-agri-900 font-black text-2xl flex items-center justify-center border-2 border-agri-300 active:scale-95 transition-transform"
               title="Increase 5 Quintals"
             >
@@ -254,7 +313,7 @@ export const BookSlotPage: React.FC = () => {
               return (
                 <div
                   key={centre.id}
-                  onClick={() => setSelectedCentreId(centre.id)}
+                  onClick={() => handleCentreSelect(centre.id)}
                   role="button"
                   tabIndex={0}
                   className={`p-4 rounded-2xl border-2 flex items-center justify-between gap-3 cursor-pointer select-none transition-all ${
@@ -323,7 +382,7 @@ export const BookSlotPage: React.FC = () => {
                 return (
                   <div
                     key={opt.value}
-                    onClick={() => setSelectedDate(opt.value)}
+                    onClick={() => handleDateSelect(opt.value)}
                     className={`p-3 rounded-xl border-2 flex items-center justify-between cursor-pointer ${
                       isSelected
                         ? 'border-agri-600 bg-agri-50 font-bold ring-1 ring-agri-400'
@@ -371,7 +430,7 @@ export const BookSlotPage: React.FC = () => {
                 return (
                   <div
                     key={opt.value}
-                    onClick={() => setSelectedTime(opt.value)}
+                    onClick={() => handleTimeSelect(opt.value)}
                     className={`p-3 rounded-xl border-2 flex items-center justify-between cursor-pointer ${
                       isSelected
                         ? 'border-agri-600 bg-agri-50 font-bold ring-1 ring-agri-400'

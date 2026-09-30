@@ -1,11 +1,12 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useLanguage } from './LanguageContext';
 import { useVoice } from './VoiceContext';
 import { useProcurement } from './ProcurementContext';
 import { GuidanceTarget } from '../types';
 import { speechRecognitionService } from '../services/speechRecognitionService';
-import { matchGenieIntent, getAiGenieIntent } from '../services/genieIntentService';
+import { getAiGenieIntent, matchGenieIntent } from '../services/genieIntentService';
+import { useGenieTaskEngine, GenieTaskState } from '../hooks/useGenieTaskEngine';
 
 interface GenieContextType {
   isOpen: boolean;
@@ -14,6 +15,7 @@ interface GenieContextType {
   activeMessage: string;
   guidanceTarget: GuidanceTarget | null;
   activeAction: 'OPEN_RESCHEDULE' | 'OPEN_CANCEL' | null;
+  taskState: GenieTaskState;
   openGenie: () => void;
   closeGenie: () => void;
   startListening: () => void;
@@ -22,6 +24,7 @@ interface GenieContextType {
   triggerVisualGuidance: (selector: string, message: string, speechText?: string) => void;
   clearGuidance: () => void;
   clearActiveAction: () => void;
+  notifyManualInteraction: (field: string, value: any) => void;
 }
 
 const GenieContext = createContext<GenieContextType | undefined>(undefined);
@@ -29,7 +32,7 @@ const GenieContext = createContext<GenieContextType | undefined>(undefined);
 export const GenieProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { language, t } = useLanguage();
   const { speak, stop: stopSpeaking } = useVoice();
-  const { currentBooking, activePlanAppointments } = useProcurement();
+  const procurement = useProcurement();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -39,9 +42,33 @@ export const GenieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [activeMessage, setActiveMessage] = useState('');
   const [guidanceTarget, setGuidanceTarget] = useState<GuidanceTarget | null>(null);
   const [activeAction, setActiveAction] = useState<'OPEN_RESCHEDULE' | 'OPEN_CANCEL' | null>(null);
+  const [shouldResumeListening, setShouldResumeListening] = useState(false);
 
   const guidanceTimerRef = useRef<any>(null);
   const transcriptRef = useRef<string>('');
+  // FIX (Bug 4): Track whether the user manually pressed Stop so onEnd does not re-process.
+  const manualStopRef = useRef<boolean>(false);
+
+  const { taskState, notifyManualInteraction, processIntent, resetTask } = useGenieTaskEngine(
+    speak,
+    navigate,
+    procurement
+  );
+
+  const { isSpeaking } = useVoice();
+
+  // Phase 7: Automatically resume listening when Genie finishes speaking during a multi-turn task
+  useEffect(() => {
+    if (!isSpeaking && shouldResumeListening && isOpen && !isListening) {
+      // Small timeout to avoid instantly picking up trailing TTS audio if any
+      const timer = setTimeout(() => {
+        if (shouldResumeListening && isOpen && !isListening) {
+          startListening();
+        }
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isSpeaking, shouldResumeListening, isOpen, isListening]);
 
   const clearGuidance = () => {
     if (guidanceTimerRef.current) {
@@ -57,48 +84,40 @@ export const GenieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const openGenie = () => {
     setIsOpen(true);
-    // Initial friendly prompt
-    const greeting = language === 'te'
-      ? 'నమస్కారం! నేను మీ డిజిటల్ సహాయకుడిని. మీకు ఏమి సహాయం కావాలి?'
-      : language === 'hi'
-        ? 'नमस्ते! मैं आपका डिजिटल सहायक हूँ। आपको क्या मदद चाहिए?'
-        : language === 'ta'
-          ? 'வணக்கம்! நான் உங்கள் டிஜிட்டல் உதவியாளர். உங்களுக்கு என்ன உதவி வேண்டும்?'
-          : language === 'kn'
-            ? 'ನಮಸ್ಕಾರ! ನಾನು ನಿಮ್ಮ ಡಿಜಿಟಲ್ ಸಹಾಯಕ. ನಿಮಗೆ ಏನು ಸಹಾಯ ಬೇಕು?'
-            : 'Hello! I am your Genie guide. How can I help you today?';
-
+    setShouldResumeListening(false);
+    const greeting = language === 'te' ? 'నమస్కారం! నేను మీ డిజిటల్ సహాయకుడిని. మీకు ఏమి సహాయం కావాలి?' : 'Hello! I am your Genie guide. How can I help you today?';
     setActiveMessage(greeting);
+    resetTask();
   };
 
   const closeGenie = () => {
     stopListening();
     setIsOpen(false);
     setIsListening(false);
+    setShouldResumeListening(false);
+    resetTask();
   };
 
   const startListening = () => {
     if (!speechRecognitionService.isSupported()) {
-      setActiveMessage(
-        language === 'te'
-          ? 'మైక్రోఫోన్ అందుబాటులో లేదు. దయచేసి క్రింద టైప్ చేయండి.'
-          : 'Microphone is not supported in this browser. Please type below.'
-      );
+      setActiveMessage('Microphone is not supported in this browser. Please type below.');
       return;
     }
 
+    // FIX (Bug 4): Clear the manual-stop flag whenever we intentionally start listening.
+    manualStopRef.current = false;
     setTranscript('');
     transcriptRef.current = '';
-    const hasErrorRef = { current: false };
-    setIsListening(true);
     stopSpeaking();
-
+    
     const success = speechRecognitionService.start(language, {
       onStart: () => {
         setIsListening(true);
         setActiveMessage(language === 'te' ? 'నేను వింటున్నాను... చెప్పండి 🎙' : 'Listening... speak now 🎙');
       },
       onResult: (text, isFinal) => {
+        // FIX (Bug 4-A): If user pressed Stop, ignore any results that trickle in.
+        if (manualStopRef.current) return;
         setTranscript(text);
         transcriptRef.current = text;
         if (isFinal) {
@@ -107,21 +126,21 @@ export const GenieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       },
       onError: (errorType, friendlyMsg) => {
-        hasErrorRef.current = true;
         setIsListening(false);
         setActiveMessage(friendlyMsg);
       },
       onEnd: () => {
         setIsListening(false);
-        if (transcriptRef.current === 'PROCESSING' || hasErrorRef.current) {
-          return; // It ended because we manually stopped it after getting a final result, or an error occurred
+        // FIX (Bug 4-A): If user manually stopped, do NOT re-process the partial transcript.
+        if (manualStopRef.current) {
+          manualStopRef.current = false;
+          return;
         }
-        
-        // If it ended naturally but we captured speech that wasn't finalized, process it anyway.
+        if (transcriptRef.current === 'PROCESSING') return;
         if (transcriptRef.current.trim()) {
           askGenie(transcriptRef.current);
         } else {
-          setActiveMessage(language === 'te' ? 'నేను ఏమీ వినలేకపోయాను. దయచేసి మళ్లీ ప్రయత్నించండి.' : 'I didn\'t hear anything. Please try again.');
+          setActiveMessage('I didn\'t hear anything. Please try again.');
         }
       }
     });
@@ -132,103 +151,76 @@ export const GenieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const stopListening = () => {
+    // FIX (Bug 4-A): Mark as manual stop BEFORE calling stop() so onEnd handler sees it.
+    manualStopRef.current = true;
     speechRecognitionService.stop();
     setIsListening(false);
+    // FIX (Bug 4-B): Prevent the useEffect from restarting the mic after user pressed Stop.
+    setShouldResumeListening(false);
   };
 
   const triggerVisualGuidance = (selector: string, message: string, speechText?: string) => {
     clearGuidance();
     setGuidanceTarget({ selector, message, speechText });
-
-    if (speechText) {
-      speak(speechText, 'genie-guidance-speech', language);
-    }
-
-    // Automatically fade guidance after 8 seconds
-    guidanceTimerRef.current = setTimeout(() => {
-      setGuidanceTarget(null);
-    }, 8000);
+    if (speechText) speak(speechText, 'genie-guidance-speech', language);
+    guidanceTimerRef.current = setTimeout(() => setGuidanceTarget(null), 8000);
   };
 
   const askGenie = async (query: string) => {
     if (!query || query.trim() === '') return;
-
-    transcriptRef.current = 'PROCESSING'; // Prevent onEnd duplicate calls or false empty errors
+    transcriptRef.current = 'PROCESSING';
     stopListening();
     stopSpeaking();
-
-    // Show an 'understanding' state
     setActiveMessage(language === 'te' ? 'అర్థం చేసుకుంటున్నాను...' : 'Thinking...');
 
-    const tokenStr = currentBooking?.tokenDisplay || 'A127';
-    
-    // Add multi-crop appointments to context so AI knows about individual crops
     let result = await getAiGenieIntent(query, language, location.pathname, {
-      currentBooking,
-      activePlanAppointments
+      currentBooking: procurement.currentBooking,
+      activePlanAppointments: procurement.activePlanAppointments
     });
 
     if (!result) {
-      // Fallback
-      console.log('Falling back to deterministic Genie intent');
-      result = matchGenieIntent(query, location.pathname, tokenStr);
+      result = matchGenieIntent(query, location.pathname);
     }
-
-    const responseText = result.spokenResponses[language] || result.spokenResponses.en;
-    setActiveMessage(responseText);
-
-    // Speak response
-    speak(responseText, 'genie-main-speech', language);
-
-    // Handle navigation
-    if (result.route && location.pathname !== result.route) {
-      navigate(result.route, { state: { cropMentioned: result.cropMentioned } });
+    
+    // Pass rawQuery for yes/no confirmation detection
+    const intentData = { ...result, rawQuery: query };
+    const taskResult = await processIntent(intentData, language);
+    
+    setActiveMessage(taskResult.responseText);
+    speak(taskResult.responseText, 'genie-main-speech', language);
+    
+    if (taskResult.action && taskResult.action !== 'NONE') {
+      setActiveAction(taskResult.action);
     }
-
-    // Set action (e.g. open reschedule modal)
-    if (result.action && result.action !== 'NONE') {
-      setActiveAction(result.action);
-    }
-
-    // Trigger visual guidance overlay after slight navigation delay
-    if (result.guidanceSelector) {
+    
+    // Trigger visual guidance if available and close panel
+    if (taskResult.guidanceSelector) {
       setTimeout(() => {
         clearGuidance();
-        setGuidanceTarget({ selector: result.guidanceSelector!, message: responseText });
-        guidanceTimerRef.current = setTimeout(() => {
-          setGuidanceTarget(null);
-        }, 8000);
+        setGuidanceTarget({ selector: taskResult.guidanceSelector!, message: taskResult.responseText });
+        guidanceTimerRef.current = setTimeout(() => setGuidanceTarget(null), 8000);
       }, 400);
     }
 
-    // Close panel after a short delay so the farmer can see the page and guidance pointer
-    setTimeout(() => {
-      setIsOpen(false);
-    }, 2200);
+    // PART 1: DO NOT CLOSE GENIE DURING A TASK
+    // If the task engine is awaiting information or confirmation, we must NOT close the Genie.
+    // We only close if the action is completed or cancelled (i.e. task goes back to NONE/IDLE).
+    if (taskResult.task === 'NONE' || taskResult.step === 'IDLE' || taskResult.isComplete) {
+      setShouldResumeListening(false);
+      setTimeout(() => {
+        setIsOpen(false);
+      }, 2200);
+    } else {
+      // Phase 7: Resume listening for multi-turn tasks
+      setShouldResumeListening(true);
+    }
   };
-
-  // Clear guidance on user navigation change unless just set
-  useEffect(() => {
-    // keep target active for small window
-  }, [location.pathname]);
 
   return (
     <GenieContext.Provider
       value={{
-        isOpen,
-        isListening,
-        transcript,
-        activeMessage,
-        guidanceTarget,
-        activeAction,
-        openGenie,
-        closeGenie,
-        startListening,
-        stopListening,
-        askGenie,
-        triggerVisualGuidance,
-        clearGuidance,
-        clearActiveAction
+        isOpen, isListening, transcript, activeMessage, guidanceTarget, activeAction, taskState,
+        openGenie, closeGenie, startListening, stopListening, askGenie, triggerVisualGuidance, clearGuidance, clearActiveAction, notifyManualInteraction
       }}
     >
       {children}
@@ -238,8 +230,6 @@ export const GenieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
 export const useGenie = (): GenieContextType => {
   const context = useContext(GenieContext);
-  if (!context) {
-    throw new Error('useGenie must be used within a GenieProvider');
-  }
+  if (!context) throw new Error('useGenie must be used within a GenieProvider');
   return context;
 };

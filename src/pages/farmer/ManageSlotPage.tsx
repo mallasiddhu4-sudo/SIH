@@ -22,6 +22,22 @@ import { PrimaryButton } from '../../components/common/PrimaryButton';
 import { VoiceSpeaker } from '../../components/common/VoiceSpeaker';
 import { MOCK_CENTRES } from '../../data/mockCentres';
 
+// FIX (Bug 2-C): Map a normalised time string (from Genie taskState) to the
+// closest available alternativeSlot index so the UI selection updates.
+const ALTERNATIVE_SLOTS = [
+  { date: '2026-09-04', dateLabel: '4 September 2026', time: '10:00 AM - 11:00 AM', label: 'Morning Slot' },
+  { date: '2026-09-04', dateLabel: '4 September 2026', time: '11:00 AM - 12:00 PM', label: 'Midday Slot' },
+  { date: '2026-09-05', dateLabel: '5 September 2026', time: '10:00 AM - 11:00 AM', label: 'Next Day Morning' },
+  { date: '2026-09-05', dateLabel: '5 September 2026', time: '02:00 PM - 03:00 PM', label: 'Afternoon Slot' },
+];
+
+function findMatchingSlot(date?: string, time?: string) {
+  if (!date && !time) return null;
+  return ALTERNATIVE_SLOTS.findIndex(s =>
+    (date ? s.date === date : true) && (time ? s.time === time : true)
+  );
+}
+
 export const ManageSlotPage: React.FC = () => {
   const { t, language } = useLanguage();
   const { activePlanAppointments, reschedulePlanAppointment, cancelPlanAppointment } = useProcurement();
@@ -70,6 +86,17 @@ export const ManageSlotPage: React.FC = () => {
     }
   }, [activeAction, clearActiveAction]);
 
+  // FIX (Bug 2-C): Sync reschedule modal selection when Genie provides a specific time/date.
+  const { taskState } = useGenie();
+  useEffect(() => {
+    if (taskState.task !== 'RESCHEDULE') return;
+    const idx = findMatchingSlot(taskState.date, taskState.time);
+    if (idx !== null && idx >= 0) {
+      setSelectedDate(ALTERNATIVE_SLOTS[idx].date);
+      setSelectedTime(ALTERNATIVE_SLOTS[idx].time);
+    }
+  }, [taskState.date, taskState.time, taskState.task]);
+
   if (!currentBooking) {
     return (
       <PageContainer
@@ -90,12 +117,7 @@ export const ManageSlotPage: React.FC = () => {
     );
   }
 
-  const alternativeSlots = [
-    { date: '2026-09-04', dateLabel: '4 September 2026', time: '10:00 AM - 11:00 AM', label: 'Morning Slot' },
-    { date: '2026-09-04', dateLabel: '4 September 2026', time: '11:00 AM - 12:00 PM', label: 'Midday Slot' },
-    { date: '2026-09-05', dateLabel: '5 September 2026', time: '10:00 AM - 11:00 AM', label: 'Next Day Morning' },
-    { date: '2026-09-05', dateLabel: '5 September 2026', time: '02:00 PM - 03:00 PM', label: 'Afternoon Slot' },
-  ];
+  const alternativeSlots = ALTERNATIVE_SLOTS;
 
   const handleConfirmReschedule = () => {
     const centre = MOCK_CENTRES.find(c => c.id === selectedCentreId) || MOCK_CENTRES[0];
@@ -236,6 +258,7 @@ export const ManageSlotPage: React.FC = () => {
             <button
               type="button"
               id="reschedule-btn"
+              data-genie-target="reschedule-button"
               onClick={() => setShowRescheduleModal(true)}
               className="w-full sm:flex-1 py-3.5 px-5 rounded-2xl bg-agri-50 hover:bg-agri-100 text-agri-900 font-black text-base border-2 border-agri-400 flex items-center justify-center gap-2 transition-transform active:scale-98 shadow-sm min-h-touch"
             >
@@ -246,6 +269,7 @@ export const ManageSlotPage: React.FC = () => {
             <button
               type="button"
               id="cancel-btn"
+              data-genie-target="cancel-button"
               onClick={() => setShowCancelModal(true)}
               className="w-full sm:flex-1 py-3.5 px-5 rounded-2xl bg-white hover:bg-red-50 text-red-700 font-bold text-base border-2 border-red-200 hover:border-red-300 flex items-center justify-center gap-2 transition-transform active:scale-98 shadow-sm min-h-touch"
             >
